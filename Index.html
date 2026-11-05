@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0D2B3E">
+<title>سجل الأمطار</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg: 'var(--bg)',
+          surface: 'var(--surface)',
+          ink: 'var(--ink)',
+          muted: 'var(--muted)',
+          line: 'var(--line)',
+          field: 'var(--field)',
+          accent: 'var(--accent)',
+          hero: 'var(--hero)',
+          danger: 'var(--danger)',
+          warnbg: 'var(--warn-bg)',
+          warnink: 'var(--warn-ink)'
+        },
+        fontFamily: {
+          sans: ['"IBM Plex Sans Arabic"', 'Tahoma', 'Arial', 'sans-serif']
+        }
+      }
+    }
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #E8EEF1;
+    --surface: #FFFFFF;
+    --ink: #10293A;
+    --muted: #5B7080;
+    --line: #CBD7DE;
+    --field: #F2F7F9;
+    --accent: #17719F;
+    --accent-strong: #0F5A85;
+    --on-accent: #FFFFFF;
+    --hero: #0D2B3E;
+    --danger: #B3372F;
+    --danger-bg: #B3372F;
+    --warn-bg: #FFF1CC;
+    --warn-ink: #5C4100;
+    --bar: #5AAAD3;
+    --bar-max: #0D2B3E;
+    --grid: #D6E1E7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #0A1820;
+      --surface: #112430;
+      --ink: #E4EEF3;
+      --muted: #8AA3B3;
+      --line: #234050;
+      --field: #0D1E28;
+      --accent: #4FB0E6;
+      --accent-strong: #7CC6F0;
+      --on-accent: #06202F;
+      --hero: #0F3248;
+      --danger: #FF8A80;
+      --danger-bg: #C0382F;
+      --warn-bg: #3A2E0B;
+      --warn-ink: #FFD98A;
+      --bar: #2E86B8;
+      --bar-max: #8FD0F5;
+      --grid: #1D3646;
+    }
+  }
+
+  html { -webkit-text-size-adjust: 100%; }
+  body { min-height: 100vh; padding-bottom: env(safe-area-inset-bottom); }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .field {
+    display: block;
+    width: 100%;
+    min-height: 3rem;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: var(--field);
+    color: var(--ink);
+    padding: .75rem .9rem;
+    font: inherit;
+    font-size: 16px;
+  }
+  .field::placeholder { color: var(--muted); opacity: .8; }
+  .field[aria-invalid="true"] { border-color: var(--danger); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 100%; min-height: 3rem; padding: .7rem 1rem;
+    border-radius: 16px; font-weight: 600; font-size: 1rem;
+    transition: background-color .15s, transform .1s;
+  }
+  .btn:active { transform: scale(.98); }
+  .btn-primary { background: var(--accent); color: var(--on-accent); }
+  .btn-primary:hover { background: var(--accent-strong); }
+  .btn-ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+  .btn-ghost:hover { background: var(--field); }
+  .btn-danger { background: var(--danger-bg); color: #fff; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+
+<body class="bg-bg text-ink font-sans antialiased">
+
+<div id="warn" class="sticky top-0 z-40 hidden bg-warnbg px-4 py-3 text-sm text-warnink" role="alert">
+  تعذّر الحفظ داخل هذا المتصفح (ربما بسبب وضع التصفح الخاص). ستضيع السجلات عند إغلاق الصفحة، فصدّر نسخة احتياطية أولاً بأول.
+</div>
+
+<main class="mx-auto w-full max-w-xl space-y-8 px-4 pb-24 pt-6">
+
+  <header>
+    <h1 class="text-2xl font-bold">سجل الأمطار</h1>
+    <p class="mt-1 text-sm text-muted">سجّل كمية المطر بالمليمتر، وتابع إجمالي كل شهر.</p>
+  </header>
+
+  <!-- ملخص الشهر الحالي: مقياس المطر -->
+  <section class="flex gap-5 rounded-[28px] bg-hero p-5 text-white" aria-label="ملخص الشهر الحالي">
+    <div id="gauge" class="relative h-[230px] w-[6.5rem] shrink-0" role="img" aria-label="مقياس المطر">
+      <div id="gaugeTicks" class="absolute inset-y-0 left-0 right-[3.75rem]"></div>
+      <div class="absolute inset-y-0 right-0 w-14 overflow-hidden rounded-t-2xl rounded-b-[28px] bg-white/10">
+        <div id="gaugeFill" class="absolute inset-x-0 bottom-0 border-t-2 border-white/60 transition-[height] duration-700 ease-out"
+             style="height:0%; background:linear-gradient(180deg,#7CCBF2,#2E93CF);"></div>
+        <div class="pointer-events-none absolute inset-0 rounded-t-2xl rounded-b-[28px] border-2 border-white/40"></div>
+      </div>
+    </div>
+
+    <div class="flex min-w-0 flex-1 flex-col justify-between">
+      <div>
+        <p id="heroMonth" class="text-sm text-white/70"></p>
+        <p class="mt-1 flex items-baseline gap-2">
+          <span id="heroTotal" class="text-5xl font-bold leading-none tabular-nums">0</span>
+          <span class="text-lg text-white/70">مم</span>
+        </p>
+        <p id="heroSub" class="mt-2 text-sm text-white/70"></p>
+      </div>
+      <dl class="mt-4 space-y-1.5 border-t border-white/20 pt-3 text-sm">
+        <div class="flex items-baseline justify-between gap-3">
+          <dt class="text-white/70">إجمالي <span id="heroYear"></span></dt>
+          <dd id="heroYearTotal" class="font-semibold tabular-nums"></dd>
+        </div>
+        <div class="flex items-baseline justify-between gap-3">
+          <dt class="shrink-0 text-white/70">آخر تسجيل</dt>
+          <dd id="heroLast" class="text-left"></dd>
+        </div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- نموذج الإدخال -->
+  <section aria-labelledby="formTitle" class="rounded-3xl border border-line bg-surface p-5">
+    <h2 id="formTitle" class="text-lg font-semibold">تسجيل جديد</h2>
+    <form id="rainForm" class="mt-4 space-y-4" novalidate>
+      <div>
+        <label for="date" class="mb-1.5 block text-sm font-medium">التاريخ</label>
+        <input id="date" type="date" class="field" required>
+        <p id="dateErr" class="mt-1.5 hidden text-sm text-danger" role="alert"></p>
+      </div>
+      <div>
+        <label for="mm" class="mb-1.5 block text-sm font-medium">كمية الأمطار (مم)</label>
+        <input id="mm" type="text" inputmode="decimal" autocomplete="off" class="field" placeholder="مثال: 12.5">
+        <p id="mmErr" class="mt-1.5 hidden text-sm text-danger" role="alert"></p>
+      </div>
+      <div>
+        <label for="note" class="mb-1.5 block text-sm font-medium">ملاحظات (اختياري)</label>
+        <input id="note" type="text" maxlength="200" autocomplete="off" class="field" placeholder="مثال: مطر غزير مع رعد">
+      </div>
+      <button type="submit" class="btn btn-primary">حفظ التسجيل</button>
+    </form>
+  </section>
+
+  <!-- الإجمالي الشهري + الرسم البياني -->
+  <section aria-labelledby="monthlyTitle">
+    <div class="flex items-center justify-between gap-3">
+      <h2 id="monthlyTitle" class="text-lg font-semibold">الإجمالي الشهري</h2>
+      <select id="yearSelect" class="field" style="width:auto;min-height:2.5rem;padding:.4rem 2rem .4rem .8rem" aria-label="اختر السنة"></select>
+    </div>
+    <p class="mt-1 text-sm text-muted">إجمالي السنة: <strong id="yearTotal" class="font-semibold text-ink tabular-nums"></strong></p>
+
+    <div class="mt-4 rounded-3xl border border-line bg-surface p-3">
+      <div class="relative h-[390px]">
+        <canvas id="chart" role="img" aria-label="رسم بياني لكميات الأمطار الشهرية"></canvas>
+      </div>
+    </div>
+
+    <ul id="monthList" class="mt-3 divide-y divide-line"></ul>
+    <p id="monthEmpty" class="mt-4 hidden text-sm text-muted">لا توجد سجلات في هذه السنة. سجّل أول كمية أمطار من النموذج أعلاه.</p>
+  </section>
+
+  <!-- السجلات -->
+  <section aria-labelledby="recTitle">
+    <div class="flex items-baseline justify-between gap-3">
+      <h2 id="recTitle" class="text-lg font-semibold">السجلات</h2>
+      <span id="recCount" class="text-sm text-muted"></span>
+    </div>
+    <div class="mt-4 overflow-hidden rounded-3xl border border-line bg-surface">
+      <table class="w-full text-right">
+        <thead class="bg-field text-sm text-muted">
+          <tr>
+            <th scope="col" class="px-4 py-2.5 font-medium">التاريخ</th>
+            <th scope="col" class="px-2 py-2.5 font-medium">الكمية</th>
+            <th scope="col" class="w-14"><span class="sr-only">حذف</span></th>
+          </tr>
+        </thead>
+        <tbody id="recBody" class="divide-y divide-line"></tbody>
+      </table>
+      <p id="recEmpty" class="hidden px-4 py-6 text-sm text-muted">لا توجد سجلات بعد. ستظهر هنا كل تسجيلاتك مرتبة من الأحدث إلى الأقدم.</p>
+    </div>
+    <button id="showAll" type="button" class="btn btn-ghost mt-3 hidden"></button>
+  </section>
+
+  <!-- النسخ الاحتياطي -->
+  <section aria-labelledby="bkTitle" class="rounded-3xl border border-line p-5">
+    <h2 id="bkTitle" class="text-lg font-semibold">النسخ الاحتياطي</h2>
+    <p class="mt-1 text-sm text-muted">بياناتك محفوظة داخل متصفح هذا الهاتف فقط. صدّر نسخة بين فترة وأخرى لتستعيدها إن مسحت بيانات المتصفح أو انتقلت إلى هاتف آخر.</p>
+    <p id="lastExport" class="mt-2 text-sm"></p>
+    <div class="mt-4 grid grid-cols-2 gap-3">
+      <button id="exportBtn" type="button" class="btn btn-primary">تصدير نسخة</button>
+      <button id="importBtn" type="button" class="btn btn-ghost">استيراد نسخة</button>
+    </div>
+    <input id="importFile" type="file" accept=".json,application/json" class="hidden">
+  </section>
+
+</main>
+
+<!-- نافذة التأكيد -->
+<div id="modal" class="fixed inset-0 z-50 hidden items-end justify-center bg-black/50 p-4 sm:items-center"
+     role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="w-full max-w-sm rounded-3xl border border-line bg-surface p-5 shadow-xl">
+    <h3 id="modalTitle" class="text-lg font-semibold"></h3>
+    <p id="modalMsg" class="mt-2 text-sm text-muted"></p>
+    <div id="modalActions" class="mt-5 flex flex-col gap-2"></div>
+  </div>
+</div>
+
+<!-- إشعار قصير -->
+<div class="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center px-4" aria-live="polite">
+  <div id="toast" class="hidden max-w-sm rounded-2xl bg-ink px-4 py-3 text-sm text-bg shadow-lg"></div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const KEY = 'rain-log-v1';
+  const KEY_EXPORT = 'rain-log-last-export';
+  const MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  const DAYS = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  const PAGE_SIZE = 30;
+  const FONT = '"IBM Plex Sans Arabic", Tahoma, Arial, sans-serif';
+  const TRASH = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 11v5M14 11v5"/></svg>';
+
+  let records = [
+    {"id": "mw3fxhims1bn0x", "date": "2026-11-03", "mm": 8, "note": "رعد", "created": 1793876799370},
+    {"id": "mw3fxt2quyc54i", "date": "2026-11-04", "mm": 2, "note": "رعد", "created": 1793876814962},
+    {"id": "mw3geahlxca6uz", "date": "2026-10-06", "mm": 2, "note": "", "created": 1793877584026},
+    {"id": "mw3gempyrtz9h9", "date": "2026-10-08", "mm": 10, "note": "", "created": 1793877599878},
+    {"id": "mw3geucfx57ni4", "date": "2026-10-09", "mm": 1, "note": "", "created": 1793877609759},
+    {"id": "mw3gf47szlhdas", "date": "2026-10-10", "mm": 34.5, "note": "", "created": 1793877622552},
+    {"id": "mw3gfczubmyp2z", "date": "2026-10-18", "mm": 9, "note": "", "created": 1793877633930},
+    {"id": "hist-2025-09-08", "date": "2025-09-08", "mm": 60.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2025-11-14", "date": "2025-11-14", "mm": 2.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2025-11-17", "date": "2025-11-17", "mm": 9.5, "note": "", "created": 1735689600000},
+    {"id": "hist-2025-11-18", "date": "2025-11-18", "mm": 2.5, "note": "", "created": 1735689600000},
+    {"id": "hist-2025-11-30", "date": "2025-11-30", "mm": 21.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2025-12-10", "date": "2025-12-10", "mm": 11.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2025-12-14", "date": "2025-12-14", "mm": 3.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2025-12-16", "date": "2025-12-16", "mm": 69.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2025-12-17", "date": "2025-12-17", "mm": 13.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2025-12-22", "date": "2025-12-22", "mm": 17.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2025-12-24", "date": "2025-12-24", "mm": 17.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2025-12-25", "date": "2025-12-25", "mm": 36.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2025-12-26", "date": "2025-12-26", "mm": 2.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2025-12-27", "date": "2025-12-27", "mm": 14.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2025-12-28", "date": "2025-12-28", "mm": 20.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-01-04", "date": "2026-01-04", "mm": 9.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-01-05", "date": "2026-01-05", "mm": 60.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-01-06", "date": "2026-01-06", "mm": 19.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-01-14", "date": "2026-01-14", "mm": 14.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-01-17", "date": "2026-01-17", "mm": 39.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-01-18", "date": "2026-01-18", "mm": 56.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-01-19", "date": "2026-01-19", "mm": 11.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-01-22", "date": "2026-01-22", "mm": 8.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-01-23", "date": "2026-01-23", "mm": 11.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-01-24", "date": "2026-01-24", "mm": 24.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-01-28", "date": "2026-01-28", "mm": 3.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-01-31", "date": "2026-01-31", "mm": 2.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-02-02", "date": "2026-02-02", "mm": 13.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-02-03", "date": "2026-02-03", "mm": 3.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-02-06", "date": "2026-02-06", "mm": 16.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-02-08", "date": "2026-02-08", "mm": 3.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-02-14", "date": "2026-02-14", "mm": 12.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-03-03", "date": "2026-03-03", "mm": 23.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-03-04", "date": "2026-03-04", "mm": 29.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-03-05", "date": "2026-03-05", "mm": 7.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-03-06", "date": "2026-03-06", "mm": 4.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-03-10", "date": "2026-03-10", "mm": 3.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-03-20", "date": "2026-03-20", "mm": 4.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-03-21", "date": "2026-03-21", "mm": 13.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-03-22", "date": "2026-03-22", "mm": 6.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-03-24", "date": "2026-03-24", "mm": 2.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-03-25", "date": "2026-03-25", "mm": 7.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-03-27", "date": "2026-03-27", "mm": 6.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-03-28", "date": "2026-03-28", "mm": 13.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-04-07", "date": "2026-04-07", "mm": 14.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-04-08", "date": "2026-04-08", "mm": 16.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-04-09", "date": "2026-04-09", "mm": 2.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-04-10", "date": "2026-04-10", "mm": 4.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-04-11", "date": "2026-04-11", "mm": 14.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-04-12", "date": "2026-04-12", "mm": 3.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-04-24", "date": "2026-04-24", "mm": 3.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-04-27", "date": "2026-04-27", "mm": 13.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-04-28", "date": "2026-04-28", "mm": 15.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-04-29", "date": "2026-04-29", "mm": 3.0, "note": "", "created": 1735689600000},
+    {"id": "hist-2026-05-15", "date": "2026-05-15", "mm": 32.5, "note": "", "created": 1735689600000}
+  ];
+  let storageOk = true;
+  let year = new Date().getFullYear();
+  let showAll = false;
+  let chart = null;
+  let autoDate = '';
+
+  const $ = id => document.getElementById(id);
+  const pad = n => String(n).padStart(2, '0');
+  const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+  const fmt = n => String(Number(round2(n).toFixed(2)));
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+  function el(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function todayISO() {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  function parts(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return { y, m, d, dow: new Date(y, m - 1, d).getDay() };
+  }
+  const fmtDate = iso => { const p = parts(iso); return `${DAYS[p.dow]} ${p.d} ${MONTHS[p.m - 1]} ${p.y}`; };
+  const fmtShort = iso => {
+    const p = parts(iso);
+    const cy = new Date().getFullYear();
+    return `${p.d} ${MONTHS[p.m - 1]}${p.y !== cy ? ' ' + p.y : ''}`;
+  };
+
+  function dayWord(n) {
+    if (n === 1) return 'يوم ماطر واحد';
+    if (n === 2) return 'يومان ماطران';
+    if (n <= 10) return `${n} أيام ماطرة`;
+    return `${n} يومًا ماطرًا`;
+  }
+  function countWord(n) {
+    if (n === 1) return 'سجل واحد';
+    if (n === 2) return 'سجلان';
+    if (n <= 10) return `${n} سجلات`;
+    return `${n} سجلًا`;
+  }
+
+  function parseNum(s) {
+    s = String(s).trim()
+      .replace(/[٠-٩]/g, d => d.charCodeAt(0) - 0x0660)
+      .replace(/[۰-۹]/g, d => d.charCodeAt(0) - 0x06F0)
+      .replace(/[٫,،]/g, '.');
+    if (!/^(\d+(\.\d+)?|\.\d+)$/.test(s)) return NaN;
+    return parseFloat(s);
+  }
+
+  function readStore(k) {
+    try { return localStorage.getItem(k); } catch (e) { storageOk = false; return null; }
+  }
+  function writeStore(k, v) {
+    try { localStorage.setItem(k, v); return true; } catch (e) { storageOk = false; return false; }
+  }
+
+  function clean(r) {
+    if (!r || typeof r !== 'object') return null;
+    const date = String(r.date || '');
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+    if (!m) return null;
+    const dt = new Date(+m[1], +m[2] - 1, +m[3]);
+    if (dt.getFullYear() !== +m[1] || dt.getMonth() !== +m[2] - 1 || dt.getDate() !== +m[3]) return null;
+    const mm = typeof r.mm === 'number' ? r.mm : parseFloa
